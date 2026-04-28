@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Шпион</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card: #13131a;
+    --accent: #e63946;
+    --accent2: #f4a261;
+    --text: #f1faee;
+    --muted: #6b7280;
+    --border: #1f1f2e;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* NOISE TEXTURE */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.03'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .screen { display: none; flex-direction: column; align-items: center; padding: 24px 20px; min-height: 100vh; position: relative; z-index: 1; }
+  .screen.active { display: flex; }
+
+  /* HEADER */
+  .logo {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 52px;
+    letter-spacing: 6px;
+    color: var(--accent);
+    text-shadow: 0 0 30px rgba(230,57,70,0.5);
+    margin-bottom: 4px;
+  }
+  .logo-sub { font-size: 11px; letter-spacing: 4px; color: var(--muted); text-transform: uppercase; margin-bottom: 32px; }
+
+  /* BUTTONS */
+  .btn {
+    width: 100%;
+    padding: 16px;
+    border-radius: 12px;
+    border: none;
+    font-family: 'Inter', sans-serif;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.5px;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 20px rgba(230,57,70,0.4);
+  }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-secondary {
+    background: var(--card);
+    color: var(--text);
+    border: 1px solid var(--border);
+  }
+  .btn-secondary:active { transform: scale(0.97); }
+  .btn-danger {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+
+  /* INPUTS */
+  input[type=text], input[type=number] {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    color: var(--text);
+    font-family: 'Inter', sans-serif;
+    font-size: 15px;
+    outline: none;
+    transition: border 0.2s;
+  }
+  input:focus { border-color: var(--accent); }
+
+  /* PLAYER LIST */
+  .player-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    width: 100%;
+    margin-bottom: 8px;
+    animation: fadeIn 0.3s ease;
+  }
+  .player-name { font-weight: 600; font-size: 15px; }
+  .player-num { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .remove-btn { background: none; border: none; color: var(--accent); font-size: 20px; cursor: pointer; padding: 4px 8px; }
+
+  /* ROLE CARD */
+  .role-card {
+    width: 100%;
+    background: var(--card);
+    border-radius: 20px;
+    padding: 32px 24px;
+    text-align: center;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .role-card::before {
+    content: '';
+    position: absolute;
+    top: -40px; left: -40px;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: var(--accent);
+    opacity: 0.06;
+    filter: blur(30px);
+  }
+  .player-turn {
+    font-size: 13px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .player-turn-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 36px;
+    letter-spacing: 3px;
+    margin-bottom: 24px;
+  }
+  .tap-hint {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 20px;
+    animation: pulse 2s infinite;
+  }
+
+  /* REVEALED ROLE */
+  .role-emoji { font-size: 64px; margin-bottom: 16px; }
+  .role-title {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 42px;
+    letter-spacing: 4px;
+    margin-bottom: 8px;
+  }
+  .role-spy { color: var(--accent); text-shadow: 0 0 20px rgba(230,57,70,0.6); }
+  .role-civilian { color: #4ade80; text-shadow: 0 0 20px rgba(74,222,128,0.4); }
+  .location-label { font-size: 12px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+  .location-name {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 28px;
+    letter-spacing: 2px;
+    color: var(--accent2);
+  }
+
+  /* RESULTS */
+  .result-header {
+    font-family: 'Bebas Neue', sans-serif;
+    font-size: 38px;
+    letter-spacing: 4px;
+    text-align: center;
+    margin-bottom: 8px;
+  }
+  .spy-reveal {
+    background: var(--card);
+    border: 1px solid var(--accent);
+    border-radius: 14px;
+    padding: 20px;
+    text-align: center;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .spy-label { font-size: 11px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 6px; }
+  .spy-name { font-family: 'Bebas Neue', sans-serif; font-size: 32px; color: var(--accent); letter-spacing: 3px; }
+
+  /* MISC */
+  .gap { margin-bottom: 12px; }
+  .gap-lg { margin-bottom: 24px; }
+  .section-title { font-size: 12px; color: var(--muted); letter-spacing: 3px; text-transform: uppercase; margin-bottom: 12px; align-self: flex-start; }
+  .counter { font-size: 13px; color: var(--muted); margin-bottom: 16px; }
+  .divider { width: 100%; height: 1px; background: var(--border); margin: 16px 0; }
+
+  .hidden-role {
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 16px;
+    padding: 40px 20px;
+    width: 100%;
+    text-align: center;
+    cursor: pointer;
+    border: 2px dashed var(--border);
+    transition: border-color 0.2s;
+  }
+  .hidden-role:active { border-color: var(--accent); }
+  .hidden-icon { font-size: 48px; margin-bottom: 12px; }
+  .hidden-text { font-size: 14px; color: var(--muted); }
+
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes reveal { from { opacity: 0; transform: scale(0.8); } to { opacity: 1; transform: scale(1); } }
+  .reveal-anim { animation: reveal 0.4s cubic-bezier(0.34,1.56,0.64,1); }
+
+  .locations-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .location-chip {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    text-align: center;
+    color: var(--muted);
+  }
+  .location-chip.current {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: rgba(244,162,97,0.08);
+  }
+</style>
+</head>
+<body>
+
+<!-- SCREEN 1: SETUP -->
+<div class="screen active" id="screen-setup">
+  <div class="logo">🕵️ ШПИОН</div>
+  <div class="logo-sub">Социальная игра</div>
+
+  <div class="section-title">Игроки</div>
+  <div id="players-list" style="width:100%"></div>
+
+  <div style="display:flex;gap:8px;width:100%;margin-bottom:16px;">
+    <input type="text" id="player-input" placeholder="Имя игрока..." maxlength="20">
+    <button class="btn btn-primary" style="width:auto;padding:14px 20px;" onclick="addPlayer()">+</button>
+  </div>
+
+  <div class="divider"></div>
+  <div class="section-title">Настройки</div>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;width:100%;margin-bottom:12px;">
+    <span style="font-size:14px;color:var(--muted);">Количество шпионов</span>
+    <div style="display:flex;align-items:center;gap:12px;">
+      <button class="btn btn-secondary" style="width:36px;height:36px;padding:0;font-size:18px;" onclick="changeSpy(-1)">−</button>
+      <span id="spy-count" style="font-size:18px;font-weight:700;">1</span>
+      <button class="btn btn-secondary" style="width:36px;height:36px;padding:0;font-size:18px;" onclick="changeSpy(1)">+</button>
+    </div>
+  </div>
+
+  <div class="gap"></div>
+  <button class="btn btn-primary" onclick="startGame()">Начать игру 🎮</button>
+</div>
+
+<!-- SCREEN 2: TURN (waiting) -->
+<div class="screen" id="screen-turn">
+  <div class="logo">🕵️ ШПИОН</div>
+  <div class="logo-sub" id="turn-counter"></div>
+
+  <div class="role-card">
+    <div class="player-turn">Передай телефон игроку</div>
+    <div class="player-turn-name" id="turn-name"></div>
+    <div class="hidden-role" onclick="revealRole()">
+      <div class="hidden-icon">👁️</div>
+      <div style="font-size:15px;font-weight:600;margin-bottom:4px;">Нажми чтобы узнать роль</div>
+      <div class="hidden-text">Никто другой не должен видеть!</div>
+    </div>
+  </div>
+</div>
+
+<!-- SCREEN 3: REVEALED ROLE -->
+<div class="screen" id="screen-role">
+  <div class="logo">🕵️ ШПИОН</div>
+
+  <div class="role-card reveal-anim" id="role-card-content">
+  </div>
+
+  <div class="gap-lg"></div>
+  <button class="btn btn-primary" id="next-btn" onclick="nextPlayer()">Следующий игрок 👉</button>
+  <div class="gap"></div>
+  <div class="tap-hint">Запомни свою роль!</div>
+</div>
+
+<!-- SCREEN 4: GAME (all roles shown) -->
+<div class="screen" id="screen-game">
+  <div class="logo">🕵️ ШПИОН</div>
+  <div class="logo-sub">Игра началась!</div>
+
+  <div class="role-card" style="margin-bottom:16px;">
+    <div class="player-turn">Локация этой игры</div>
+    <div style="height:12px"></div>
+    <div class="location-label">📍 место</div>
+    <div class="location-name" id="game-location"></div>
+    <div style="height:8px"></div>
+    <div style="font-size:13px;color:var(--muted);">Шпион не знает это место!</div>
+  </div>
+
+  <div class="section-title">Все игроки</div>
+  <div id="players-summary" style="width:100%;margin-bottom:16px;"></div>
+
+  <div class="gap"></div>
+  <button class="btn btn-danger" onclick="endGame()">Раскрыть шпиона 🔍</button>
+  <div class="gap"></div>
+  <button class="btn btn-secondary" onclick="resetGame()">Новая игра</button>
+</div>
+
+<!-- SCREEN 5: RESULTS -->
+<div class="screen" id="screen-results">
+  <div class="result-header">ИГРА<br>ОКОНЧЕНА</div>
+  <div class="logo-sub" style="margin-bottom:24px;">раскрываем карты</div>
+
+  <div class="spy-reveal">
+    <div class="spy-label">🕵️ Шпион был</div>
+    <div class="spy-name" id="result-spy"></div>
+  </div>
+
+  <div class="role-card" style="margin-bottom:16px;">
+    <div class="location-label">📍 Локация была</div>
+    <div style="height:6px"></div>
+    <div class="location-name" id="result-location"></div>
+  </div>
+
+  <button class="btn btn-primary" onclick="resetGame()">Играть снова 🔄</button>
+</div>
+
+<script>
+const tg = window.Telegram?.WebApp;
+if (tg) { tg.ready(); tg.expand(); }
+
+const LOCATIONS = [
+  "Аэропорт", "Больница", "Казино", "Школа", "Военная база",
+  "Пляж", "Цирк", "Посольство", "Ресторан", "Супермаркет",
+  "Кинотеатр", "Тюрьма", "Космическая станция", "Подводная лодка",
+  "Банк", "Отель", "Полицейский участок", "Университет",
+  "Зоопарк", "Музей", "Корабль", "Поезд", "Замок"
+];
+
+let players = [];
+let spyCount = 1;
+let roles = [];
+let currentPlayer = 0;
+let gameLocation = "";
+let spies = [];
+
+function addPlayer() {
+  const input = document.getElementById('player-input');
+  const name = input.value.trim();
+  if (!name || players.includes(name)) return;
+  players.push(name);
+  input.value = '';
+  renderPlayers();
+}
+
+document.getElementById('player-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addPlayer();
+});
+
+function removePlayer(i) {
+  players.splice(i, 1);
+  renderPlayers();
+}
+
+function renderPlayers() {
+  const list = document.getElementById('players-list');
+  list.innerHTML = players.map((p, i) => `
+    <div class="player-item">
+      <div>
+        <div class="player-name">${p}</div>
+        <div class="player-num">Игрок ${i+1}</div>
+      </div>
+      <button class="remove-btn" onclick="removePlayer(${i})">✕</button>
+    </div>
+  `).join('');
+}
+
+function changeSpy(d) {
+  spyCount = Math.max(1, Math.min(spyCount + d, Math.max(1, players.length - 2)));
+  document.getElementById('spy-count').textContent = spyCount;
+}
+
+function startGame() {
+  if (players.length < 3) { alert('Нужно минимум 3 игрока!'); return; }
+  if (spyCount >= players.length) { alert('Шпионов не может быть больше игроков!'); return; }
+
+  gameLocation = LOCATIONS[Math.floor(Math.random() * LOCATIONS.length)];
+  spies = [];
+  const shuffled = [...Array(players.length).keys()].sort(() => Math.random() - 0.5);
+  for (let i = 0; i < spyCount; i++) spies.push(shuffled[i]);
+  roles = players.map((_, i) => spies.includes(i) ? 'spy' : 'civilian');
+  currentPlayer = 0;
+
+  showScreen('screen-turn');
+  showTurn();
+}
+
+function showTurn() {
+  document.getElementById('turn-name').textContent = players[currentPlayer];
+  document.getElementById('turn-counter').textContent = `Игрок ${currentPlayer + 1} из ${players.length}`;
+}
+
+function revealRole() {
+  const isSpy = roles[currentPlayer] === 'spy';
+  const card = document.getElementById('role-card-content');
+
+  if (isSpy) {
+    card.innerHTML = `
+      <div class="role-emoji">🕵️</div>
+      <div class="role-title role-spy">ТЫ ШПИОН!</div>
+      <div style="height:12px"></div>
+      <div style="font-size:14px;color:var(--muted);line-height:1.5;">
+        Ты не знаешь локацию.<br>Слушай внимательно и не раскройся!
+      </div>
+    `;
+  } else {
+    card.innerHTML = `
+      <div class="role-emoji">👤</div>
+      <div class="role-title role-civilian">МИРНЫЙ</div>
+      <div style="height:12px"></div>
+      <div class="location-label">📍 Ваша локация</div>
+      <div class="location-name">${gameLocation}</div>
+      <div style="height:12px"></div>
+      <div style="font-size:13px;color:var(--muted);">Найди шпиона среди игроков!</div>
+    `;
+  }
+
+  const nextBtn = document.getElementById('next-btn');
+  if (currentPlayer === players.length - 1) {
+    nextBtn.textContent = 'Начать игру! 🎮';
+  } else {
+    nextBtn.textContent = 'Следующий игрок 👉';
+  }
+
+  showScreen('screen-role');
+}
+
+function nextPlayer() {
+  currentPlayer++;
+  if (currentPlayer >= players.length) {
+    startMainGame();
+  } else {
+    showScreen('screen-turn');
+    showTurn();
+  }
+}
+
+function startMainGame() {
+  document.getElementById('game-location').textContent = gameLocation;
+  const summary = document.getElementById('players-summary');
+  summary.innerHTML = players.map((p, i) => `
+    <div class="player-item">
+      <div class="player-name">${p}</div>
+      <div style="font-size:12px;color:var(--muted);">Игрок ${i+1}</div>
+    </div>
+  `).join('');
+  showScreen('screen-game');
+}
+
+function endGame() {
+  const spyNames = spies.map(i => players[i]).join(', ');
+  document.getElementById('result-spy').textContent = spyNames;
+  document.getElementById('result-location').textContent = gameLocation;
+  showScreen('screen-results');
+}
+
+function resetGame() {
+  players = [];
+  spyCount = 1;
+  roles = [];
+  currentPlayer = 0;
+  document.getElementById('spy-count').textContent = '1';
+  renderPlayers();
+  showScreen('screen-setup');
+}
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo(0, 0);
+}
+</script>
+</body>
+</html>
